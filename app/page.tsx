@@ -15,6 +15,7 @@ import { buildExport, downloadSession } from "@/lib/export"
 export default function Home() {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS)
   const [showSettings, setShowSettings] = useState(false)
+  const [transcribeError, setTranscribeError] = useState<string | null>(null)
   const settingsRef = useRef(settings)
   settingsRef.current = settings
 
@@ -54,13 +55,25 @@ export default function Home() {
           body: formData,
         })
 
-        if (!res.ok) return
+        if (!res.ok) {
+          let errorMessage = "Transcription failed"
+          try {
+            const err = await res.json()
+            errorMessage = err.error || errorMessage
+          } catch {
+            // Keep default error text when server response is not JSON.
+          }
+          setTranscribeError(errorMessage)
+          return
+        }
         const data = await res.json()
         if (data.text) {
+          setTranscribeError(null)
           appendChunk(data.text)
           setTimeout(() => manualRefreshRef.current(), 500)
         }
       } catch (err) {
+        setTranscribeError("Transcription failed")
         console.error("Transcription error:", err)
       }
     },
@@ -83,6 +96,11 @@ export default function Home() {
 
   const handleStart = useCallback(() => {
     if (!settings.groqApiKey) {
+      setShowSettings(true)
+      return
+    }
+    if (!settings.groqApiKey.startsWith("gsk_")) {
+      alert("Invalid Groq API key. It should start with gsk_")
       setShowSettings(true)
       return
     }
@@ -153,7 +171,7 @@ export default function Home() {
 
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <div style={{ width: "33.33%", padding: "24px", overflow: "hidden", display: "flex", flexDirection: "column", borderRight: "1px solid #111111" }}>
-          <TranscriptPanel chunks={chunks} isRecording={isRecording} error={micError} onStart={handleStart} onStop={handleStop} />
+          <TranscriptPanel chunks={chunks} isRecording={isRecording} error={micError || transcribeError} onStart={handleStart} onStop={handleStop} />
         </div>
 
         <div style={{ width: "33.33%", padding: "24px", overflow: "hidden", display: "flex", flexDirection: "column", borderRight: "1px solid #111111", background: "#080808" }}>

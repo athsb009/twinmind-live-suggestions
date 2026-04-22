@@ -57,11 +57,23 @@ export async function POST(req: NextRequest) {
     }))
 
     return NextResponse.json({ suggestions })
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("Suggestions error:", err)
-    return NextResponse.json(
-      { error: "Suggestions failed" },
-      { status: 500 }
-    )
+    const status =
+      typeof err === "object" &&
+      err !== null &&
+      "status" in err &&
+      typeof (err as { status?: unknown }).status === "number"
+        ? ((err as { status: number }).status ?? 500)
+        : 500
+
+    const message =
+      status === 401
+        ? "Invalid Groq API key"
+        : status === 429
+          ? "Rate limit hit — slow down"
+          : "Suggestions failed"
+
+    return NextResponse.json({ error: message }, { status })
   }
 }

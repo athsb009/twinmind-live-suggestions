@@ -17,10 +17,21 @@ export const useAudioRecorder = ({
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
   const chunksRef = useRef<Blob[]>([])
 
+  const getMimeType = useCallback(() => {
+    const types = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/ogg;codecs=opus",
+      "audio/mp4",
+    ]
+    return types.find((type) => MediaRecorder.isTypeSupported(type)) ?? ""
+  }, [])
+
   const startNewRecorder = useCallback(
     (stream: MediaStream) => {
+      const mimeType = getMimeType()
       const recorder = new MediaRecorder(stream, {
-        mimeType: "audio/webm;codecs=opus",
+        ...(mimeType ? { mimeType } : {}),
       })
 
       chunksRef.current = []
@@ -33,7 +44,8 @@ export const useAudioRecorder = ({
 
       recorder.onstop = () => {
         if (chunksRef.current.length > 0) {
-          const blob = new Blob(chunksRef.current, { type: "audio/webm" })
+          const blobType = mimeType || "audio/webm"
+          const blob = new Blob(chunksRef.current, { type: blobType })
           onChunkReady(blob)
           chunksRef.current = []
         }
@@ -42,7 +54,7 @@ export const useAudioRecorder = ({
       recorder.start()
       mediaRecorderRef.current = recorder
     },
-    [onChunkReady]
+    [getMimeType, onChunkReady]
   )
 
   const startRecording = useCallback(async () => {

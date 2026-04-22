@@ -72,11 +72,12 @@ export const useChat = ({
           const token = decoder.decode(value)
           appendAssistantToken(assistantId, token)
         }
-      } catch (err) {
-        appendAssistantToken(
-          assistantId,
-          "\n\nSomething went wrong. Please try again."
-        )
+      } catch (err: unknown) {
+        const errorText =
+          err instanceof Error && err.message.includes("401")
+            ? "Invalid API key — check Settings."
+            : "Connection error — please try again."
+        appendAssistantToken(assistantId, `\n\n_${errorText}_`)
         console.error("Chat stream error:", err)
       } finally {
         setIsStreaming(false)

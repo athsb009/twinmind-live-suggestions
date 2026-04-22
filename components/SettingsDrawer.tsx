@@ -47,6 +47,8 @@ export const SettingsDrawer = ({ settings, onSave, onClose }: SettingsDrawerProp
   const [draft, setDraft] = useState<AppSettings>(settings)
   const update = (key: keyof AppSettings, value: string | number) =>
     setDraft((prev) => ({ ...prev, [key]: value }))
+  const hasApiKey = draft.groqApiKey.trim().length > 0
+  const isValidApiKeyFormat = /^gsk_[A-Za-z0-9]+$/.test(draft.groqApiKey.trim())
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", justifyContent: "flex-end" }}>
@@ -75,7 +77,33 @@ export const SettingsDrawer = ({ settings, onSave, onClose }: SettingsDrawerProp
         <div style={{ flex: 1, overflowY: "auto", padding: "24px", display: "flex", flexDirection: "column", gap: "24px" }}>
           <div>
             <label style={labelStyle}>Groq API key</label>
-            <input type="password" value={draft.groqApiKey} onChange={(e) => update("groqApiKey", e.target.value)} placeholder="gsk_..." style={{ ...fieldStyle, resize: undefined }} />
+            <div style={{ position: "relative" }}>
+              <input
+                type="password"
+                value={draft.groqApiKey}
+                onChange={(e) => update("groqApiKey", e.target.value)}
+                placeholder="gsk_..."
+                style={{ ...fieldStyle, resize: undefined, paddingRight: "36px" }}
+              />
+              {hasApiKey && isValidApiKeyFormat && (
+                <span
+                  aria-label="API key format valid"
+                  title="API key format valid"
+                  style={{
+                    position: "absolute",
+                    right: "12px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    color: "#22c55e",
+                    fontSize: "14px",
+                    fontWeight: 700,
+                    pointerEvents: "none",
+                  }}
+                >
+                  ✓
+                </span>
+              )}
+            </div>
           </div>
 
           <div>
