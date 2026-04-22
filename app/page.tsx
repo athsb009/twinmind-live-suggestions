@@ -1,65 +1,173 @@
-import Image from "next/image";
+"use client"
+
+import { useState, useCallback, useRef } from "react"
+import { AppSettings, Suggestion } from "@/types"
+import { useTranscript } from "@/hooks/useTranscript"
+import { useAudioRecorder } from "@/hooks/useAudioRecorder"
+import { useSuggestions } from "@/hooks/useSuggestions"
+import { useChat } from "@/hooks/useChat"
+import { TranscriptPanel } from "@/components/TranscriptPanel"
+import { SuggestionsPanel } from "@/components/SuggestionsPanel"
+import { ChatPanel } from "@/components/ChatPanel"
+import { SettingsDrawer, DEFAULT_APP_SETTINGS } from "@/components/SettingsDrawer"
+import { buildExport, downloadSession } from "@/lib/export"
 
 export default function Home() {
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS)
+  const [showSettings, setShowSettings] = useState(false)
+  const settingsRef = useRef(settings)
+  settingsRef.current = settings
+
+  const { chunks, appendChunk, fullTranscript, recentContext } = useTranscript(
+    settings.suggestionContextWindow
+  )
+
+  const fullTranscriptRef = useCallback(() => fullTranscript, [fullTranscript])
+  const recentContextRef = useCallback(() => recentContext, [recentContext])
+
+  const {
+    batches,
+    isLoading: suggestionsLoading,
+    error: suggestionsError,
+    manualRefresh,
+  } = useSuggestions({
+    getFullTranscript: fullTranscriptRef,
+    getRecentContext: recentContextRef,
+    systemPrompt: settings.suggestionPrompt,
+    apiKey: settings.groqApiKey,
+  })
+  const manualRefreshRef = useRef(manualRefresh)
+  manualRefreshRef.current = manualRefresh
+
+  const handleChunkReady = useCallback(
+    async (blob: Blob) => {
+      const key = settingsRef.current.groqApiKey
+      if (!key) return
+
+      try {
+        const formData = new FormData()
+        formData.append("audio", blob, "chunk.webm")
+        formData.append("apiKey", key)
+
+        const res = await fetch("/api/transcribe", {
+          method: "POST",
+          body: formData,
+        })
+
+        if (!res.ok) return
+        const data = await res.json()
+        if (data.text) {
+          appendChunk(data.text)
+          setTimeout(() => manualRefreshRef.current(), 500)
+        }
+      } catch (err) {
+        console.error("Transcription error:", err)
+      }
+    },
+    [appendChunk]
+  )
+
+  const { isRecording, error: micError, startRecording, stopRecording } =
+    useAudioRecorder({
+      onChunkReady: handleChunkReady,
+      intervalMs: settings.refreshInterval,
+    })
+
+  const { messages, isStreaming, sendMessage, injectSuggestion } = useChat({
+    getFullTranscript: fullTranscriptRef,
+    chatContextWindow: settings.chatContextWindow,
+    systemPrompt: settings.chatPrompt,
+    detailPrompt: settings.detailPrompt,
+    apiKey: settings.groqApiKey,
+  })
+
+  const handleStart = useCallback(() => {
+    if (!settings.groqApiKey) {
+      setShowSettings(true)
+      return
+    }
+    startRecording()
+  }, [settings.groqApiKey, startRecording])
+
+  const handleStop = useCallback(() => {
+    stopRecording()
+  }, [stopRecording])
+
+  const handleSuggestionClick = useCallback(
+    (suggestion: Suggestion) => {
+      injectSuggestion(suggestion)
+    },
+    [injectSuggestion]
+  )
+
+  const handleExport = useCallback(() => {
+    const session = buildExport(chunks, batches, messages)
+    downloadSession(session)
+  }, [chunks, batches, messages])
+
+  const handleSaveSettings = useCallback((next: AppSettings) => {
+    setSettings(next)
+    setShowSettings(false)
+  }, [])
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#0a0a0a" }}>
+      <header style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "0 24px",
+        height: "52px",
+        borderBottom: "1px solid #141414",
+        background: "#0a0a0a",
+        flexShrink: 0,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <div style={{ width: "20px", height: "20px", borderRadius: "6px", background: "#e8e6e1", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#0a0a0a" }} />
+          </div>
+          <span style={{ fontSize: "13px", fontWeight: 600, color: "#e8e6e1", letterSpacing: "0.02em" }}>TwinMind Live</span>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          {!settings.groqApiKey && (
+            <span style={{ fontSize: "11px", color: "#f97316", background: "rgba(249,115,22,0.1)", padding: "3px 10px", borderRadius: "999px", border: "1px solid rgba(249,115,22,0.2)" }}>
+              API key required
+            </span>
+          )}
+          <button
+            onClick={handleExport}
+            disabled={chunks.length === 0 && messages.length === 0}
+            style={{ fontSize: "12px", color: "#404040", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", opacity: chunks.length === 0 && messages.length === 0 ? 0.3 : 1 }}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            Export
+          </button>
+          <button
+            onClick={() => setShowSettings(true)}
+            style={{ fontSize: "12px", color: "#606060", background: "#141414", border: "1px solid #1e1e1e", borderRadius: "7px", padding: "5px 12px", cursor: "pointer", fontFamily: "inherit" }}
           >
-            Documentation
-          </a>
+            Settings
+          </button>
         </div>
-      </main>
+      </header>
+
+      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+        <div style={{ width: "33.33%", padding: "24px", overflow: "hidden", display: "flex", flexDirection: "column", borderRight: "1px solid #111111" }}>
+          <TranscriptPanel chunks={chunks} isRecording={isRecording} error={micError} onStart={handleStart} onStop={handleStop} />
+        </div>
+
+        <div style={{ width: "33.33%", padding: "24px", overflow: "hidden", display: "flex", flexDirection: "column", borderRight: "1px solid #111111", background: "#080808" }}>
+          <SuggestionsPanel batches={batches} isLoading={suggestionsLoading} error={suggestionsError} isRecording={isRecording} onSuggestionClick={handleSuggestionClick} onManualRefresh={manualRefresh} />
+        </div>
+
+        <div style={{ width: "33.33%", padding: "24px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+          <ChatPanel messages={messages} isStreaming={isStreaming} onSendMessage={sendMessage} />
+        </div>
+      </div>
+
+      {showSettings && (
+        <SettingsDrawer settings={settings} onSave={handleSaveSettings} onClose={() => setShowSettings(false)} />
+      )}
     </div>
-  );
+  )
 }
