@@ -8,7 +8,7 @@ Built for the TwinMind Live Suggestions Assignment.
 
 ## Live Demo
 
-[twinmind-live.vercel.app]([https://twinmind-live.vercel.app](https://twinmind-live-suggestions-gamma.vercel.app/))
+[twinmind-live.vercel.app]([https://twinmind-live-suggestions-gamma.vercel.app/])
 
 ---
 
